@@ -22,7 +22,7 @@
     "productName": "Zion Bridge",
     "directories": { "output": "dist" },
     "files": ["src/**/*", "assets/**/*", "package.json"],
-    "publish": { "provider": "github", "owner": "genesysflow", "repo": "zion-bridge" },
+    "publish": { "provider": "github", "owner": "duchy-ctrl", "repo": "zion-bridge" },
     "win": {
       "target": [{ "target": "nsis", "arch": ["x64"] }],
       "icon": "assets/icon.ico",

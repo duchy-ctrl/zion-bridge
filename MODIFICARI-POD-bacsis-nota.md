@@ -4,7 +4,7 @@
 - `buildNota` (escpos.js): dacă jobul are `tip>0` → tipărește Subtotal / Bacsis / **TOTAL DE PLATA**;
   fără tip → TOTAL simplu, ca înainte. Serverul trimite `subtotal`+`tip`+`total` (vezi `printNota` în db.mjs).
 - Auto-update activat: `main.js` (initUpdater + tray „Verifică actualizări"/„Repornește și actualizează"),
-  `package.json` (electron-updater, publish → genesysflow/zion-bridge, v2.3.0), build automat pe GitHub
+  `package.json` (electron-updater, publish → duchy-ctrl/zion-bridge, v2.3.0), build automat pe GitHub
   Actions (`.github/workflows/release.yml`) — vezi `AUTO-UPDATE-pod-GHID.md` pentru pașii de pornire.
 - Backup: `escpos.js/main.js/package.json` cu sufixul `.20260713-171928.pre-*`. `node --check` curat.
 - ⚠️ Reminder: dacă bacșișul nu iese pe bonul FISCAL la casă, podul instalat e mai vechi decât build-ul din

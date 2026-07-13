@@ -131,7 +131,7 @@ function initUpdater() {
   updater.install = () => { quitting = true; dude.shutdown(); autoUpdater.quitAndInstall(); };
   updater.check(false);                                   // la pornire
   setInterval(() => updater.check(false), 6 * 3600 * 1000); // apoi la fiecare 6 ore
-  log.info('update', 'Auto-update activ (GitHub genesysflow/zion-bridge).');
+  log.info('update', 'Auto-update activ (GitHub duchy-ctrl/zion-bridge).');
 }
 
 // ---------- fereastra ----------

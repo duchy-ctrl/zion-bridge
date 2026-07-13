@@ -1,6 +1,6 @@
 # Zion Bridge (pod) — Auto-update de pe GitHub  ✅ ACTIV din v2.3.0 (13.07.2026)
 
-> Codul e la loc: `package.json` (dependență `electron-updater` + `build.publish` → genesysflow/zion-bridge),
+> Codul e la loc: `package.json` (dependență `electron-updater` + `build.publish` → duchy-ctrl/zion-bridge),
 > `src/main/main.js` (`initUpdater` + meniul din tray) și **build automat pe GitHub Actions**
 > (`.github/workflows/release.yml`) — instalerul se construiește pe serverele GitHub, NU mai e nevoie
 > de niciun PC de build.
@@ -12,7 +12,7 @@ din tray), descarcă noua versiune în fundal și o aplică la repornire — **f
 
 ## A. Setup — O SINGURĂ DATĂ
 
-1. **Creează repo-ul public `genesysflow/zion-bridge`** pe GitHub (public = podurile descarcă fără nicio
+1. **Creează repo-ul public `duchy-ctrl/zion-bridge`** pe GitHub (public = podurile descarcă fără nicio
    cheie pe ele; codul podului nu conține parole — BRIDGE_KEY stă în setările locale, nu în cod).
 2. **Publică folderul `zion-bridge` în repo** (GitHub Desktop: Add local repository → acest folder → Publish).
    `.gitignore`-ul e pregătit (node_modules, dist, backup-uri, chei — nu intră).
@@ -48,4 +48,4 @@ Nu mai construiești și nu mai instalezi nimic manual, pe niciun calculator.
 - Podul a fost făcut tolerant: dacă `npm install` n-a fost rulat, podul tot pornește (doar fără auto-update) —
   dar rulează `npm install` ca să-l ai.
 
-*Cod: `package.json` (build.publish = github genesysflow/zion-bridge) + `src/main/main.js` (initUpdater, tray).*
+*Cod: `package.json` (build.publish = github duchy-ctrl/zion-bridge) + `src/main/main.js` (initUpdater, tray).*
