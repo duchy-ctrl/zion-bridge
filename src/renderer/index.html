@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'">
+  <title>Zion Bridge</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <aside id="sidebar">
+    <div class="brand">
+      <div class="logo">⛩</div>
+      <div class="brand-t">
+        <h1>Zion Bridge</h1>
+        <span class="ver" id="version"></span>
+      </div>
+    </div>
+    <nav>
+      <button class="tab active" data-tab="status"><span class="ico">◉</span><span>Status</span></button>
+      <button class="tab" data-tab="setari"><span class="ico">⚙</span><span>Setări</span></button>
+      <button class="tab" data-tab="diagnostic"><span class="ico">⌬</span><span>Diagnostic</span></button>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="mini-stat"><span class="dot" id="side-cloud"></span><span>Cloud</span></div>
+      <div class="mini-stat"><span class="dot" id="side-fiscal"></span><span>Casă fiscală</span></div>
+      <div class="mini-stat"><span class="dot" id="side-printers"></span><span>Imprimante</span></div>
+    </div>
+  </aside>
+
+  <div id="content">
+    <!-- ============ STATUS ============ -->
+    <main id="tab-status" class="page active">
+      <div class="hero" id="hero">
+        <div class="hero-pulse" id="hero-pulse"></div>
+        <div class="hero-text">
+          <h2 id="hero-title">Pornire…</h2>
+          <p id="hero-sub">se verifică conexiunile</p>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="stat">
+          <span class="stat-n" id="stat-bons">0</span>
+          <span class="stat-l">bonuri fiscale azi</span>
+        </div>
+        <div class="stat">
+          <span class="stat-n" id="stat-prints">0</span>
+          <span class="stat-l">comenzi tipărite azi</span>
+        </div>
+        <div class="stat">
+          <span class="stat-n" id="stat-sync">—</span>
+          <span class="stat-l">ultima sincronizare</span>
+        </div>
+      </div>
+
+      <div class="cards">
+        <div class="card" id="card-cloud">
+          <div class="card-head"><span class="dot" id="dot-cloud"></span><h2>Cloud</h2></div>
+          <p class="big" id="cloud-main">—</p>
+          <p class="small" id="cloud-sub">așteptare...</p>
+        </div>
+        <div class="card" id="card-fiscal">
+          <div class="card-head"><span class="dot" id="dot-fiscal"></span><h2>Casă fiscală</h2></div>
+          <p class="big" id="fiscal-main">—</p>
+          <p class="small" id="fiscal-sub">așteptare...</p>
+          <button id="btn-resume" class="mini danger hidden">Reia modulul fiscal</button>
+        </div>
+        <div class="card" id="card-printers">
+          <div class="card-head"><span class="dot" id="dot-printers"></span><h2>Imprimante</h2></div>
+          <div id="printer-status-list"></div>
+          <p class="small" id="printers-sub"></p>
+        </div>
+      </div>
+
+      <section class="journal-wrap">
+        <h3>Jurnal live</h3>
+        <div id="journal" class="journal"></div>
+      </section>
+    </main>
+
+    <!-- ============ SETĂRI ============ -->
+    <main id="tab-setari" class="page">
+      <form id="settings-form" autocomplete="off">
+        <section class="group">
+          <h3><span class="g-ico">☁</span>Cloud</h3>
+          <div class="grid2">
+            <label>URL aplicație<input type="text" name="apiUrl"></label>
+            <label>BRIDGE_KEY <span class="hint">(OBLIGATORIE — identică cu cea din Netlify)</span>
+              <input type="password" name="bridgeKey" placeholder="cheia podului"></label>
+            <label>Interval interogare (secunde)
+              <input type="number" name="pollSec" min="2" max="30" step="1"></label>
+          </div>
+        </section>
+
+        <section class="group">
+          <h3><span class="g-ico">🧾</span>Casă fiscală (Datecs prin DUDE)
+            <label class="switch"><input type="checkbox" name="fiscalEnabled"><span>activă</span></label>
+          </h3>
+          <div class="grid2">
+            <label>Mod conectare
+              <select name="fiscalMode">
+                <option value="tcp">Rețea (TCP/IP)</option>
+                <option value="serial">Serial (COM)</option>
+              </select></label>
+            <span></span>
+            <label class="tcp-only">IP casă<input type="text" name="fiscalIp" placeholder="192.168.0.71"></label>
+            <label class="tcp-only">Port casă<input type="number" name="fiscalPort" placeholder="3999"></label>
+            <label class="serial-only hidden">Port COM<input type="text" name="fiscalCom" placeholder="COM3"></label>
+            <label class="serial-only hidden">Baud<input type="number" name="fiscalBaud" placeholder="115200"></label>
+            <label>Operator<input type="number" name="fiscalOperator" min="1"></label>
+            <label>Parolă operator<input type="password" name="fiscalParola" placeholder="0001"></label>
+            <label>Număr AMEF<input type="number" name="fiscalAmef" min="1"></label>
+            <label>Grupă TVA implicită<input type="number" name="fiscalTva" min="1" max="8"></label>
+          </div>
+          <div class="row">
+            <button type="button" class="action" id="btn-detect-dude">Detectează DUDE</button>
+            <button type="button" class="action" id="btn-scan-casa">Caută casa în rețea (port 3999)</button>
+            <button type="button" class="action" id="btn-test-conn">Test conexiune casă</button>
+            <button type="button" class="action warn" id="btn-test-fiscal">⚠ Test bon fiscal (bon real!)</button>
+          </div>
+          <p class="result" id="fiscal-tools-result"></p>
+        </section>
+
+        <section class="group">
+          <h3><span class="g-ico">🖨</span>Imprimante comandă
+            <span class="hint">numele stației trebuie să corespundă cu cel din aplicația web (ex. „bucatarie", „bar")</span>
+          </h3>
+          <div id="printer-list"></div>
+          <div class="row">
+            <button type="button" class="action" id="btn-add-printer">+ Adaugă imprimantă</button>
+            <button type="button" class="action" id="btn-scan-pr">Caută imprimante în rețea (port 9100)</button>
+          </div>
+          <p class="result" id="printer-tools-result"></p>
+        </section>
+
+        <section class="group">
+          <h3><span class="g-ico">⚙</span>Aplicație</h3>
+          <div class="row">
+            <label class="switch"><input type="checkbox" name="startAtLogin"><span>Pornește automat la Windows</span></label>
+            <label class="switch"><input type="checkbox" name="startMinimized"><span>Pornește minimizat în tray</span></label>
+            <label class="switch"><input type="checkbox" name="debugLog"><span>Log detaliat (debug)</span></label>
+          </div>
+        </section>
+
+        <div class="row save-row">
+          <button type="submit" class="action primary big-btn">Salvează setările</button>
+          <span class="result" id="save-result"></span>
+        </div>
+      </form>
+    </main>
+
+    <!-- ============ DIAGNOSTIC ============ -->
+    <main id="tab-diagnostic" class="page">
+      <div class="row">
+        <button class="action" id="btn-open-logs">Deschide folderul cu loguri</button>
+        <span class="hint">Fișierele bridge.log se rotesc automat la 2 MB (păstrăm ultimele 5).</span>
+      </div>
+      <div id="debuglog" class="journal mono"></div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

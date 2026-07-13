@@ -1,0 +1,38 @@
+{
+  "name": "zion-bridge",
+  "productName": "Zion Bridge",
+  "version": "2.3.0",
+  "description": "Podul dintre Zion Suite (cloud) și casa de marcat Datecs + imprimantele de comandă",
+  "author": "Zion Gardens",
+  "license": "UNLICENSED",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "ro.ziongardens.bridge",
+    "productName": "Zion Bridge",
+    "directories": { "output": "dist" },
+    "files": ["src/**/*", "assets/**/*", "package.json"],
+    "publish": { "provider": "github", "owner": "genesysflow", "repo": "zion-bridge" },
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "assets/icon.ico",
+      "artifactName": "ZionBridge-Setup-${version}.exe"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}

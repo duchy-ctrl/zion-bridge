@@ -1,0 +1,16 @@
+node_modules/
+dist/
+*.log
+logs/
+# backup-uri locale de cod (nu intră în repo)
+*.bak*
+*.pre-*
+package.json.2*
+# chei / secrete — NICIODATĂ în git
+.env*
+*.jks
+*.keystore
+GH_TOKEN*
+# fișiere macOS
+.DS_Store
+._*

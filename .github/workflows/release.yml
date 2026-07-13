@@ -1,0 +1,23 @@
+# Build automat Zion Bridge (pod) — rulează pe serverele GitHub, NU pe PC-ul casei.
+# Se declanșează la: (1) push de tag „v*" (ex. v2.3.0) sau (2) manual, din tab-ul Actions → Run workflow.
+# Rezultat: Release pe GitHub cu ZionBridge-Setup-<versiune>.exe + latest.yml → podurile se actualizează singure.
+name: release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch: {}
+permissions:
+  contents: write   # ca electron-builder să poată publica Release-ul
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Instalează dependențele
+        run: npm install --no-audit --no-fund
+      - name: Build + publicare Release
+        run: npx electron-builder --win --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
