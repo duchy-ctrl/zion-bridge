@@ -118,8 +118,18 @@ async function doPrintReceipt(order) {
     }
 
     // 53 — plată/total (0 = numerar, 1 = card); cardul = marfă + bacșiș
-    const payType = String(order.plata).toLowerCase() === 'card' ? 1 : 0;
-    await step(53, `${payType}\t${money(Math.round((Number(order.total) + bacsis) * 100) / 100)}\t`, 'Plată');
+    const mix = order.payMix && Number(order.payMix.cash) > 0 && Number(order.payMix.card) > 0 ? order.payMix : null;
+    if (mix) {
+      // PLATĂ MIXTĂ pe același bon: întâi porția cash (tip 0), apoi restul pe card + bacșiș (tip 1).
+      // Casa acumulează plățile; suma lor = order.total + bacșiș = totalul bonului (marfă + articolul Bacsis).
+      const cashPart = Math.round(Number(mix.cash) * 100) / 100;
+      const cardPart = Math.round((Number(mix.card) + bacsis) * 100) / 100;
+      await step(53, `0\t${money(cashPart)}\t`, `Plată numerar ${money(cashPart)}`);
+      await step(53, `1\t${money(cardPart)}\t`, `Plată card ${money(cardPart)}`);
+    } else {
+      const payType = String(order.plata).toLowerCase() === 'card' ? 1 : 0;
+      await step(53, `${payType}\t${money(Math.round((Number(order.total) + bacsis) * 100) / 100)}\t`, 'Plată');
+    }
 
     // 56 — închide bonul; al doilea câmp din răspuns = numărul bonului
     const fin = await step(56, '', 'Închidere bon');
