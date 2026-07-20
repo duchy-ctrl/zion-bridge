@@ -76,9 +76,7 @@ async function doPrintReceipt(order) {
   const s = settingsStore.load().fiscal;
   let opened = false;
   try {
-    let o;
-    try { o = await dude.open(s); }
-    catch (e) { e.connection = true; throw e; }   // timeout / worker mort la open = casa nu răspunde → bonul rămâne în coadă și se reia singur
+    const o = await dude.open(s);
     if (!o.ok) {
       const err = new Error(o.err || 'Nu mă pot conecta la casă');
       err.connection = true;
@@ -158,9 +156,7 @@ async function doRunReport(tip) {
   const s = settingsStore.load().fiscal;
   let opened = false;
   try {
-    let o;
-    try { o = await dude.open(s); }
-    catch (e) { e.connection = true; throw e; }   // timeout / worker mort la open = casa nu răspunde → raportul rămâne în coadă și se reia singur
+    const o = await dude.open(s);
     if (!o.ok) { const err = new Error(o.err || 'Nu mă pot conecta la casă'); err.connection = true; throw err; }
     opened = true;
     // Datecs cmd 69 (raport zilnic): parametrul 1 este LITERA tipului de raport,
@@ -183,9 +179,7 @@ async function doRunPeriodReport(from, to) {
   const s = settingsStore.load().fiscal;
   let opened = false;
   try {
-    let o;
-    try { o = await dude.open(s); }
-    catch (e) { e.connection = true; throw e; }   // timeout / worker mort la open = casa nu răspunde → raportul rămâne în coadă și se reia singur
+    const o = await dude.open(s);
     if (!o.ok) { const err = new Error(o.err || 'Nu mă pot conecta la casă'); err.connection = true; throw err; }
     opened = true;
     // FP-700: raport memorie fiscală pe dată = cmd 94 (0x5E).
@@ -212,9 +206,7 @@ async function doRunZNumberReport(from, to) {
   const s = settingsStore.load().fiscal;
   let opened = false;
   try {
-    let o;
-    try { o = await dude.open(s); }
-    catch (e) { e.connection = true; throw e; }   // timeout / worker mort la open = casa nu răspunde → raportul rămâne în coadă și se reia singur
+    const o = await dude.open(s);
     if (!o.ok) { const err = new Error(o.err || 'Nu mă pot conecta la casă'); err.connection = true; throw err; }
     opened = true;
     // FP-700: raport memorie fiscală pe interval de numere Z = cmd 95 (0x5F).
