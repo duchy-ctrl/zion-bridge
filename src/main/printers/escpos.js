@@ -25,7 +25,8 @@ const SEP = '--------------------------------';
 
 /**
  * Construiește bonul de comandă pentru o secție.
- * job: { station, masa, by, at, items: [{nume, qty, note}] }
+ * job: { station, masa, by, at, barman?, items: [{nume, qty, note}] }
+ * `barman` apare doar pe bonurile de bauturi (repartizare round-robin) — server-ul îl pune doar acolo.
  */
 function buildTicket(job) {
   const t = fmtTime(job.at);
@@ -37,9 +38,10 @@ function buildTicket(job) {
     line(),
     line(`Masa: ${job.masa || '-'}`),
     line(`Ora:  ${t.hm}  ${t.dm}`),
-    line(`Ospatar: ${job.by || '-'}`),
-    line(SEP)
+    line(`Ospatar: ${job.by || '-'}`)
   ];
+  if (job.barman) parts.push(BOLD_ON, line(`Barman: ${job.barman}`), BOLD_OFF);
+  parts.push(line(SEP));
   for (const it of (job.items || [])) {
     const q = Number(it.qty) || 1;
     parts.push(BOLD_ON, line(`${q} x  ${it.nume || ''}`), BOLD_OFF);
