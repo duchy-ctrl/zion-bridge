@@ -84,6 +84,8 @@ async function cycle() {
     const ip = job.ip || local.ip;
     const port = job.port || local.port || 9100;
 
+    // eticheta TIPULUI de job în log/jurnal — înainte totul apărea ca „Comandă", inclusiv notele și stornourile
+    const tip = job.type === 'nota' ? 'Notă' : (job.type === 'storno' ? 'Storno' : 'Comandă');
     try {
       if (!ip) throw new Error(`Lipsește IP-ul imprimantei pentru secția „${job.station}"`);
       await sendRaw(ip, port, job.type === 'storno' ? buildStorno(job) : job.type === 'nota' ? buildNota(job) : buildTicket(job));
@@ -91,16 +93,16 @@ async function cycle() {
       await sendAck({ id: job.id, ok: true, err: '' });
       state.setPrinter(key, { label, ok: true, error: '', lastTs: Date.now() });
       state.bumpPrintCount();
-      log.ok('print', `Comandă ${label} · ${job.masa || ''} ✓`);
-      if (journalFn) journalFn('ok', `Comandă ${label} · ${job.masa || ''}`);
+      log.ok('print', `${tip} ${label} · ${job.masa || ''} ✓`);
+      if (journalFn) journalFn('ok', `${tip} ${label} · ${job.masa || ''}`);
     } catch (e) {
       const msg = e.message || 'eroare necunoscută';
       // Tipărirea a eșuat clar (nimic nu a ieșit) → ack:false; serverul poate replanifica.
       state.markProcessed(job.id, 'print-failed');
       await sendAck({ id: job.id, ok: false, err: msg.slice(0, 200) });
       state.setPrinter(key, { label, ok: false, error: msg, lastTs: Date.now() });
-      log.error('print', `Comandă ${label} EȘUATĂ · ${job.masa || ''}: ${msg}`);
-      if (journalFn) journalFn('err', `Comandă ${label} EȘUATĂ · ${job.masa || ''} · ${msg}`);
+      log.error('print', `${tip} ${label} EȘUATĂ · ${job.masa || ''}: ${msg}`);
+      if (journalFn) journalFn('err', `${tip} ${label} EȘUATĂ · ${job.masa || ''} · ${msg}`);
       if (notifyFn) notifyFn(`Imprimanta ${label} a eșuat`, msg);
     }
   }
