@@ -47,9 +47,13 @@ function looksLikeWrongPassword(answer, err) {
   return s.includes('wrong password') || s.includes('parola') && s.includes('gresit');
 }
 
+// Rapoartele (69/94/95) tipăresc MULT — un Z cu o zi plină trece lejer de 25s. Timeout-ul scurt
+// e pentru bonuri; pe rapoarte așteptăm până la 2 minute înainte să declarăm casa blocată.
+const REPORT_EXEC_TIMEOUT_MS = 120000;
+
 // execută o comandă și aruncă dacă a eșuat
-async function step(num, params, what) {
-  const r = await dude.exec(num, params);
+async function step(num, params, what, timeoutMs) {
+  const r = await dude.exec(num, params, timeoutMs);
   if (!r.ok) throw new Error(`${what}: ${r.err || 'eroare worker'}`);
   const { code, fields } = parseAnswer(r.answer);
   log.debug('fiscal', `cmd ${num} → rc=${r.rc} code=${code} msg="${r.errMsg || ''}" status="${r.status || ''}"`, r.answer ? String(r.answer).slice(0, 200) : '');
@@ -151,9 +155,37 @@ async function doPrintReceipt(order) {
   }
 }
 
+// ---------- CHEIA DE CONTROL: contorul Z din memoria fiscală ----------
+// Citire READ-ONLY (nu tipărește nimic): FP-700, cmd 64 (0x40) = informații despre ultima
+// înregistrare din memoria fiscală; câmpul 1 din răspuns = NUMĂRUL ultimei înregistrări,
+// adică al ultimului Z. E sursa de adevăr când noi și casa nu mai suntem de acord.
+// Dacă modelul răspunde altfel, comanda/parametrii se ajustează FĂRĂ rebuild, din settings.json:
+// fiscal.zCntCmd (implicit 64) / fiscal.zCntParams (implicit '').
+// ATENȚIE (audit 18.08): comanda aleasă TREBUIE să întoarcă un contor CRESCĂTOR în câmpul 1 —
+// verificarea de mai jos e „zAfter > zBefore". NU folosi cmd 68 (înregistrări LIBERE, scade la
+// fiecare Z): cu el, orice Z reușit după timeout ar părea „nemișcat" → reluare → DUBLU Z.
+async function readZCounter() {
+  const s = settingsStore.load().fiscal;
+  const num = Number(s.zCntCmd) || 64;
+  const params = (s.zCntParams === undefined || s.zCntParams === null) ? '' : String(s.zCntParams);
+  try {
+    const r = await dude.exec(num, params);
+    if (!r.ok) return null;
+    const { code, fields } = parseAnswer(r.answer);
+    if ((r.rc !== null && r.rc < 0) || (code !== null && code !== 0)) {
+      log.warn('fiscal', `Contorul Z nu se poate citi (cmd ${num} → code=${code}, rc=${r.rc}) — răspuns: ${String(r.answer||'').slice(0,120)}`);
+      return null;
+    }
+    const n = parseInt(String(fields[1] || '').replace(/\D/g, ''), 10);
+    if (!Number.isFinite(n) || n <= 0) { log.warn('fiscal', `Contorul Z: răspuns neinterpretabil: ${String(r.answer||'').slice(0,120)}`); return null; }
+    return n;
+  } catch (_) { return null; }
+}
+
 // ---------- rapoarte X / Z (cerute din aplicația web, prin cloud) ----------
 // cmd 69 = raport zilnic: parametru "0" = Z (închide ziua fiscală), "2" = X (informativ).
 // Folosește ACELAȘI mutex ca bonurile — nu se intercalează cu un bon în lucru.
+// Întoarce { text, nrZ, verificat } — nrZ = contorul Z al casei (cheia de control către zion-suite).
 async function doRunReport(tip) {
   const s = settingsStore.load().fiscal;
   let opened = false;
@@ -163,10 +195,53 @@ async function doRunReport(tip) {
     catch (e) { e.connection = true; throw e; }   // timeout / worker mort la open = casa nu răspunde → raportul rămâne în coadă și se reia singur
     if (!o.ok) { const err = new Error(o.err || 'Nu mă pot conecta la casă'); err.connection = true; throw err; }
     opened = true;
-    // Datecs cmd 69 (raport zilnic): parametrul 1 este LITERA tipului de raport,
-    // nu o cifră — 'Z' = raport Z (închide ziua), 'X' = raport X (informativ).
-    const fin = await step(69, tip === 'z' ? 'Z' : 'X', tip === 'z' ? 'Raport Z' : 'Raport X');
-    return String(fin.answer || (fin.fields||[]).join(' ') || '').replace(/\s+/g,' ').trim().slice(0,1500);
+    // cheia de control se citește ÎNAINTE: dacă exec-ul dă timeout, comparația before/after decide adevărul
+    const zBefore = tip === 'z' ? await readZCounter() : null;
+    let fin;
+    try {
+      // Datecs cmd 69 (raport zilnic): parametrul 1 este LITERA tipului de raport,
+      // nu o cifră — 'Z' = raport Z (închide ziua), 'X' = raport X (informativ).
+      fin = await step(69, tip === 'z' ? 'Z' : 'X', tip === 'z' ? 'Raport Z' : 'Raport X', REPORT_EXEC_TIMEOUT_MS);
+    } catch (e) {
+      if (!e.timeout) throw e;
+      // TIMEOUT la exec: workerul COM a fost omorât, dar CASA poate să fi terminat raportul
+      // (incidentul din 18.08: Z-ul a ieșit pe hârtie, aplicația a arătat „eroare"). NU ghicim:
+      // reconectăm și ÎNTREBĂM casa — contorul Z e cheia de control.
+      opened = false;
+      try { await dude.close(); } catch (_) {}
+      await new Promise(r => setTimeout(r, 5000));   // lăsăm casa să termine de tipărit
+      try { const o2 = await dude.open(s); if (o2 && o2.ok) opened = true; } catch (_) {}
+      let zAfter = (opened && tip === 'z') ? await readZCounter() : null;
+      // AUDIT 18.08 (🟡1): casa scrie înregistrarea Z în memoria fiscală abia la FINALUL tipăririi.
+      // Un „nemișcat" imediat poate însemna doar „încă tipărește" — recitim o dată după 30s înainte
+      // să declarăm reluarea sigură. Abia un contor nemișcat DE DOUĂ ORI înseamnă „Z-ul nu s-a făcut".
+      if (tip === 'z' && zBefore !== null && zAfter !== null && zAfter <= zBefore) {
+        log.warn('fiscal', `Contorul Z pare nemișcat (#${zBefore}) — mai aștept 30s și recitesc (poate casa încă tipărește).`);
+        await new Promise(r => setTimeout(r, 30000));
+        const z2 = await readZCounter();
+        if (z2 !== null) zAfter = z2;
+      }
+      if (tip === 'z' && zBefore !== null && zAfter !== null) {
+        if (zAfter > zBefore) {
+          log.warn('fiscal', `Timeout la Z, dar contorul Z a crescut (${zBefore} → ${zAfter}) — raportul E FĂCUT, îl confirm.`);
+          return { text: `Z confirmat prin contorul casei după timeout (Z #${zAfter})`, nrZ: zAfter, verificat: true };
+        }
+        // contorul NEMIȘCAT și după recitire = Z-ul chiar nu s-a făcut → reluarea e SIGURĂ (rămâne în coadă)
+        const err = new Error(`Timeout la Z, iar contorul Z al casei NU a crescut (rămas la #${zBefore}, verificat de două ori) — se reia automat.`);
+        err.connection = true; throw err;
+      }
+      if (tip !== 'z') {
+        // X e informativ — retipărirea nu strică nimic → rămâne în coadă și se reia
+        const err = new Error('Timeout la raportul X — se reia automat.');
+        err.connection = true; throw err;
+      }
+      // Z fără verificare posibilă (contorul nu se poate citi) → NU riscăm un al doilea Z:
+      // eroare EXPLICITĂ, omul se uită pe hârtie înainte să mai ceară unul.
+      throw new Error(`Timeout la Z și nu am putut citi contorul Z al casei — VERIFICĂ PE HÂRTIE dacă Z-ul a ieșit înainte să mai ceri unul. (${e.message})`);
+    }
+    const nrZ = tip === 'z' ? await readZCounter() : null;
+    const text = String(fin.answer || (fin.fields||[]).join(' ') || '').replace(/\s+/g,' ').trim().slice(0,1500);
+    return { text, nrZ, verificat: tip === 'z' && zBefore !== null && nrZ !== null && nrZ > zBefore };
   } finally {
     if (opened) await dude.close(); // eliberăm portul casei imediat
   }
@@ -193,7 +268,9 @@ async function doRunPeriodReport(from, to) {
     // FP-700 cere data în format DD-MM-YY (cu liniuțe), conform manualului (DDMMYY dă „-112102 param 2").
     // Alternative dacă mai refuză: tip '1', an pe 4 cifre 'DD-MM-YYYY', sau cmd 95 (raport pe nr. Z).
     const dmy = d => { const [Y,M,D] = String(d).split('-'); return `${D}-${M}-${Y.slice(2)}`; };
-    const fin = await step(94, `0\t${dmy(from)}\t${dmy(to)}\t`, `Raport perioadă ${from}..${to}`);
+    let fin;
+    try { fin = await step(94, `0\t${dmy(from)}\t${dmy(to)}\t`, `Raport perioadă ${from}..${to}`, REPORT_EXEC_TIMEOUT_MS); }
+    catch (e) { if (e.timeout) e.connection = true; throw e; }   // READ-ONLY: retipărirea nu strică → rămâne în coadă
     return String(fin.answer || (fin.fields||[]).join(' ') || '').replace(/\s+/g,' ').trim().slice(0,1500);
   } finally {
     if (opened) await dude.close();
@@ -220,7 +297,9 @@ async function doRunZNumberReport(from, to) {
     // FP-700: raport memorie fiscală pe interval de numere Z = cmd 95 (0x5F).
     // Params (TAB): <tip>\t<nr Z start>\t<nr Z end>\t  — tip '0' = SUMAR, tip '1' = DETALIAT.
     // (tip '0' dădea „SUMAR DIN MF"; pt detaliat = '1'. Dacă '1' nu e detaliat, încearcă '2'.)
-    const fin = await step(95, `1\t${from}\t${to}\t`, `Raport Z detaliat #${from}..${to}`);
+    let fin;
+    try { fin = await step(95, `1\t${from}\t${to}\t`, `Raport Z detaliat #${from}..${to}`, REPORT_EXEC_TIMEOUT_MS); }
+    catch (e) { if (e.timeout) e.connection = true; throw e; }   // READ-ONLY: retipărirea nu strică → rămâne în coadă
     return String(fin.answer || (fin.fields||[]).join(' ') || '').replace(/\s+/g,' ').trim().slice(0,1500);
   } finally {
     if (opened) await dude.close();
@@ -352,14 +431,17 @@ async function cycle() {
     }
 
     try {
-      const result = tip === 'periodic' ? await runPeriodReport(rep.from, rep.to)
+      const out = tip === 'periodic' ? await runPeriodReport(rep.from, rep.to)
         : tip === 'znumar' ? await runZNumberReport(rep.from, rep.to)
         : await runReport(tip);
+      // runReport întoarce { text, nrZ, verificat } (cheia de control); celelalte întorc string
+      const r = (out && typeof out === 'object') ? out : { text: out || '', nrZ: null, verificat: false };
       state.markProcessed(rep.id, 'report');             // ÎNTÂI marcăm, apoi ack
-      await sendReportAck({ id: rep.id, ok: true, result: result || '', err: '' });
+      await sendReportAck({ id: rep.id, ok: true, result: r.text || '', err: '',
+        ...(r.nrZ ? { nrZ: r.nrZ, verificat: !!r.verificat } : {}) });
       state.setFiscal({ ok: true, error: '' });
-      log.ok('fiscal', `Raport ${tip.toUpperCase()} executat pe casă ✓`);
-      if (journalFn) journalFn('ok', `Raport ${tip.toUpperCase()} executat pe casă`);
+      log.ok('fiscal', `Raport ${tip.toUpperCase()} executat pe casă ✓${r.nrZ ? ` · Z #${r.nrZ}` : ''}`);
+      if (journalFn) journalFn('ok', `Raport ${tip.toUpperCase()} executat pe casă${r.nrZ ? ` · Z #${r.nrZ}` : ''}`);
     } catch (e) {
       const msg = e.message || 'Eroare necunoscută';
       if (e.connection) {

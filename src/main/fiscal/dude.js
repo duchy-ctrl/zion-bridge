@@ -86,18 +86,24 @@ function ensureWorker() {
   });
 }
 
-function rawSend(cmd, args) {
+function rawSend(cmd, args, timeoutMs) {
   return new Promise((resolve, reject) => {
     try { ensureWorker(); } catch (e) { return reject(e); }
     if (!proc) return reject(new Error('Workerul COM nu a putut porni (powershell.exe indisponibil?)'));
     const id = nextId++;
     const payload = JSON.stringify({ id, cmd, ...args }) + '\n';
+    // Timeout PER CEREREA asta, nu global: un raport Z tipărește zeci de secunde LEGITIM (incidentul
+    // din 18.08 — Z-ul a ieșit pe hârtie după ce noi am declarat timeout la 25s). Cine cheamă exec()
+    // pentru rapoarte dă un timeout mai lung; bonurile rămân pe cel scurt.
+    const tmo = Number(timeoutMs) > 0 ? Number(timeoutMs) : REQ_TIMEOUT_MS;
     const timer = setTimeout(() => {
       waiting.delete(id);
       // worker blocat (casă care nu răspunde la nivel COM) → îl omorâm ca să nu rămână zombi
       try { proc.kill(); } catch (_) {}
-      reject(new Error(`Timeout (${REQ_TIMEOUT_MS / 1000}s) la comanda '${cmd}' către casă — conexiunea pare blocată`));
-    }, REQ_TIMEOUT_MS);
+      const err = new Error(`Timeout (${tmo / 1000}s) la comanda '${cmd}' către casă — conexiunea pare blocată`);
+      err.timeout = true;   // fiscal.js VERIFICĂ pe casă ce s-a întâmplat, nu ghicește (cheia de control)
+      reject(err);
+    }, tmo);
     waiting.set(id, { resolve, reject, timer });
     proc.stdin.write(payload, 'utf8', (err) => {
       if (err) {
@@ -110,8 +116,8 @@ function rawSend(cmd, args) {
 }
 
 // Toate cererile trec printr-un lanț — niciodată două comenzi simultan către casă.
-function send(cmd, args = {}) {
-  const p = chain.then(() => rawSend(cmd, args));
+function send(cmd, args = {}, timeoutMs) {
+  const p = chain.then(() => rawSend(cmd, args, timeoutMs));
   chain = p.catch(() => {}); // erorile nu blochează lanțul
   return p;
 }
@@ -121,7 +127,7 @@ async function open(cfg) {
   if (cfg.mode === 'serial') return send('open', { mode: 'serial', com: cfg.com, baud: cfg.baud });
   return send('open', { mode: 'tcp', ip: cfg.ip, port: cfg.port });
 }
-async function exec(num, params) { return send('exec', { num, params }); }
+async function exec(num, params, timeoutMs) { return send('exec', { num, params }, timeoutMs); }
 async function close() { try { return await send('close'); } catch (e) { return { ok: false, err: e.message }; } }
 
 function shutdown() {
