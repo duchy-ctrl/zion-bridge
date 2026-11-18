@@ -132,7 +132,8 @@ async function doPrintReceipt(order) {
     }
 
     // 53 — plată/total (0 = numerar, 1 = card); cardul = marfă + bacșiș
-    const mix = order.payMix && Number(order.payMix.cash) > 0 && Number(order.payMix.card) > 0 ? order.payMix : null;
+    // o vânzare cu cardul Zion nu are niciodată plată mixtă (serverul o refuză); dacă totuși ar veni cu `payMix`, NU o batem ca numerar + card (audit 2.5.0)
+    const mix = !esteTopup && order.payMix && Number(order.payMix.cash) > 0 && Number(order.payMix.card) > 0 ? order.payMix : null;
     if (mix) {
       // PLATĂ MIXTĂ pe același bon: întâi porția cash (tip 0), apoi restul pe card + bacșiș (tip 1).
       // Casa acumulează plățile; suma lor = order.total + bacșiș = totalul bonului (marfă + articolul Bacsis).
