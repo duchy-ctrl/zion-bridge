@@ -78,6 +78,14 @@ function printReceipt(order) {
 
 async function doPrintReceipt(order) {
   const s = settingsStore.load().fiscal;
+  // CARDUL ZION (top-up, v2.5.0): vânzarea se plătește pe casă cu tipul de plată dat de server (`payType`, 2–9, din Setări → Top-up; 0 = numerar și
+  // 1 = card sunt refuzate de server). Fără un cod valid bonul NU se deschide: o vânzare cu cardul Zion bătută ca numerar ar strica Z-ul casei.
+  // Verificarea stă ÎNAINTE de conexiune și de cmd 48 — nu rămâne niciun bon deschis pe casă.
+  const esteTopup = String(order.plata).toLowerCase() === 'topup';
+  const payTypeTopup = Number(order.payType);
+  if (esteTopup && !(Number.isInteger(payTypeTopup) && payTypeTopup >= 2 && payTypeTopup <= 9)) {
+    throw new Error('Lipsește tipul de plată pentru cardul Zion (codul 2–9 se pune în aplicație, Setări → Top-up)');
+  }
   let opened = false;
   try {
     let o;
@@ -133,7 +141,7 @@ async function doPrintReceipt(order) {
       await step(53, `0\t${money(cashPart)}\t`, `Plată numerar ${money(cashPart)}`);
       await step(53, `1\t${money(cardPart)}\t`, `Plată card ${money(cardPart)}`);
     } else {
-      const payType = String(order.plata).toLowerCase() === 'card' ? 1 : 0;
+      const payType = esteTopup ? payTypeTopup : (String(order.plata).toLowerCase() === 'card' ? 1 : 0);
       await step(53, `${payType}\t${money(Math.round((Number(order.total) + bacsis) * 100) / 100)}\t`, 'Plată');
     }
 
@@ -353,7 +361,9 @@ async function cycle() {
 
   let res;
   try {
-    res = await api('fiscalQueue');
+    // `cap:['payType']` (v2.5.0): spune serverului că podul știe tipul de plată trimis de el. Fără el, serverul NU trimite vânzările cu cardul Zion
+    // (top-up) — un pod vechi le-ar fi bătut pe casă ca NUMERAR. Podurile vechi nu trimit cheia și rămân exact ca înainte.
+    res = await api('fiscalQueue', { cap: ['payType'] });
     state.setCloud(true);
   } catch (e) {
     state.setCloud(false, e.message);
